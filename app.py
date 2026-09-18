@@ -1,83 +1,204 @@
 import streamlit as st
 import numpy as np
+import cv2
 import pickle
+import xgboost as xgb
 from PIL import Image
-from xgboost import XGBClassifier
 
+
+# --------------------------------------------------
+# PAGE CONFIG
+# --------------------------------------------------
 
 st.set_page_config(
     page_title="Waste Classification",
     page_icon="♻️",
-    layout="centered"
+    layout="wide"
 )
 
-st.title("♻️ Waste Classification")
-st.write("Upload an image to classify the type of waste.")
+
+# --------------------------------------------------
+# CLASS MAPPING
+# --------------------------------------------------
+
+class_names = {
+    0: "biological",
+    1: "cardboard",
+    2: "clothes",
+    3: "green_glass",
+    4: "paper",
+    5: "plastic",
+    6: "trash",
+    7: "white_glass"
+}
 
 
-# Load XGBoost model
-model = XGBClassifier()
-model.load_model("xgb_model (1).json")
+# --------------------------------------------------
+# LOAD SCALER, PCA AND MODEL
+# --------------------------------------------------
+
+@st.cache_resource
+def load_models():
+
+    # Load StandardScaler
+    with open("scaler.pkl", "rb") as file:
+        scaler = pickle.load(file)
+
+    # Load PCA
+    with open("pca.pkl", "rb") as file:
+        pca = pickle.load(file)
+
+    # Load XGBoost model
+    model = xgb.XGBClassifier()
+    model.load_model("xgb_model.json")
+
+    return scaler, pca, model
 
 
-# Load scaler
-with open("scaler (2).pkl", "rb") as file:
-    scaler = pickle.load(file)
+scaler, pca, model = load_models()
 
 
-# Load PCA
-with open("pca (1).pkl", "rb") as file:
-    pca = pickle.load(file)
+# --------------------------------------------------
+# TITLE
+# --------------------------------------------------
+
+st.title("♻️ Waste Classification System")
+
+st.write(
+    "Upload an image to classify the type of waste."
+)
 
 
-# Load Label Encoder
-with open("label_encoder (1).pkl", "rb") as file:
-    le = pickle.load(file)
+# --------------------------------------------------
+# UPLOAD IMAGE
+# --------------------------------------------------
 
-
-# Upload image
 uploaded_file = st.file_uploader(
     "Upload Waste Image",
     type=["jpg", "jpeg", "png"]
 )
 
 
+# --------------------------------------------------
+# PREDICTION
+# --------------------------------------------------
+
 if uploaded_file is not None:
 
-    # Read uploaded image
     image = Image.open(uploaded_file).convert("RGB")
 
-    # Show uploaded image
+    st.subheader("Uploaded Image")
+
     st.image(
         image,
-        caption="Uploaded Image",
-        width=300
+        caption="Input Image",
+        width=400
     )
 
-    # Resize image
-    image_resized = image.resize((64, 64))
 
-    # Convert image to NumPy array
-    image_array = np.array(image_resized)
+    if st.button("🔍 Predict Waste"):
 
-    # Flatten image
-    image_flatten = image_array.flatten().reshape(1, -1)
+        # ------------------------------------------
+        # STEP 1: PIL → NumPy
+        # ------------------------------------------
 
-    # Apply scaler
-    image_scaled = scaler.transform(image_flatten)
+        image_np = np.array(image)
 
-    # Apply PCA
-    image_pca = pca.transform(image_scaled)
 
-    # Prediction
-    prediction = model.predict(image_pca)
+        # ------------------------------------------
+        # STEP 2: RGB → BGR
+        # ------------------------------------------
 
-    # Convert encoded label to original class
-    predicted_class = le.inverse_transform(
-        prediction.astype(int)
-    )[0]
+        image_np = cv2.cvtColor(
+            image_np,
+            cv2.COLOR_RGB2BGR
+        )
 
-    # Display prediction
-    st.success(
-        f"Predicted Waste Type: {predicted_class}"
-    )
+
+        # ------------------------------------------
+        # STEP 3: Resize to 64 × 64
+        # ------------------------------------------
+
+        image_resized = cv2.resize(
+            image_np,
+            (64, 64),
+            interpolation=cv2.INTER_LINEAR
+        )
+
+
+        # ------------------------------------------
+        # STEP 4: Flatten
+        # ------------------------------------------
+
+        image_flat = image_resized.flatten()
+
+
+        # Check number of features
+        st.write(
+            "Original image features:",
+            image_flat.shape[0]
+        )
+
+
+        # ------------------------------------------
+        # STEP 5: Reshape
+        # ------------------------------------------
+
+        input_data = image_flat.reshape(1, -1)
+
+
+        # ------------------------------------------
+        # STEP 6: StandardScaler
+        # ------------------------------------------
+
+        input_scaled = scaler.transform(input_data)
+
+
+        # ------------------------------------------
+        # STEP 7: PCA
+        # ------------------------------------------
+
+        input_pca = pca.transform(input_scaled)
+
+
+        # Check PCA features
+        st.write(
+            "PCA features:",
+            input_pca.shape[1]
+        )
+
+
+        # ------------------------------------------
+        # STEP 8: XGBoost Prediction
+        # ------------------------------------------
+
+        prediction = model.predict(input_pca)
+
+
+        # ------------------------------------------
+        # STEP 9: Convert prediction to integer
+        # ------------------------------------------
+
+        predicted_label = int(prediction[0])
+
+
+        # ------------------------------------------
+        # STEP 10: Class name
+        # ------------------------------------------
+
+        predicted_class = class_names[predicted_label]
+
+
+        # ------------------------------------------
+        # DISPLAY RESULT
+        # ------------------------------------------
+
+        st.subheader("Prediction Result")
+
+        st.success(
+            f"♻️ Predicted Waste: **{predicted_class}**"
+        )
+
+        st.write(
+            f"Class Number: **{predicted_label}**"
+        )
