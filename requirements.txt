@@ -1,6 +1,7 @@
 streamlit
-pillow
 numpy
+pandas
 scikit-learn
 xgboost
-pandas
+pillow
+opencv-python-headless
