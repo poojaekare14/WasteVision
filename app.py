@@ -44,32 +44,40 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
 
-    # Read image
+    # Read uploaded image
     image = Image.open(uploaded_file).convert("RGB")
 
-    # Resize to match training
-    image = image.resize((64, 64))
+    # Show uploaded image
+    st.image(
+        image,
+        caption="Uploaded Image",
+        width=300
+    )
 
-    # Convert to NumPy array
-    image_array = np.array(image)
+    # Resize image
+    image_resized = image.resize((64, 64))
+
+    # Convert image to NumPy array
+    image_array = np.array(image_resized)
 
     # Flatten image
     image_flatten = image_array.flatten().reshape(1, -1)
 
-    # Scaling
+    # Apply scaler
     image_scaled = scaler.transform(image_flatten)
 
-    # PCA
+    # Apply PCA
     image_pca = pca.transform(image_scaled)
 
     # Prediction
     prediction = model.predict(image_pca)
 
-    # Convert encoded label back to class name
+    # Convert encoded label to original class
     predicted_class = le.inverse_transform(
         prediction.astype(int)
     )[0]
 
+    # Display prediction
     st.success(
         f"Predicted Waste Type: {predicted_class}"
     )
